@@ -1,9 +1,6 @@
 package org.example;
 
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,9 +8,6 @@ import java.util.Objects;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.example.helper.AWSConfig;
 import org.example.helper.AWSCredentialHelper;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.services.route53.Route53Client;
 import software.amazon.awssdk.services.route53.model.Change;
 import software.amazon.awssdk.services.route53.model.ChangeAction;
@@ -110,7 +104,7 @@ public class R53Helper {
         .ttl(300L)
         .resourceRecords(ResourceRecord.builder().value(geoSubdomain).build())
         .build();
-    return changeResourceRecordSets(hostedZoneId, cnameRecordSet);
+    return changeResourceRecordSets(hostedZoneId, cnameRecordSet, ChangeAction.CREATE);
   }
 
   void createWeightedARecords(String hostedZoneId,
@@ -125,17 +119,17 @@ public class R53Helper {
           .resourceRecords(
               ResourceRecord.builder().value(record.ipv4).build())
           .build();
-      changeResourceRecordSets(hostedZoneId, aRecordSet);
+      changeResourceRecordSets(hostedZoneId, aRecordSet, ChangeAction.CREATE);
     }
   }
 
   ChangeResourceRecordSetsResponse changeResourceRecordSets(String hostedZoneId,
-      ResourceRecordSet recordSet) {
+      ResourceRecordSet recordSet, ChangeAction changeAction) {
     ChangeResourceRecordSetsRequest request = ChangeResourceRecordSetsRequest.builder()
         .hostedZoneId(hostedZoneId)
         .changeBatch(ChangeBatch.builder()
             .changes(Change.builder()
-                .action(ChangeAction.CREATE)
+                .action(changeAction)
                 .resourceRecordSet(recordSet)
                 .build())
             .build())
@@ -146,6 +140,23 @@ public class R53Helper {
       e.printStackTrace();
     }
     return null;
+  }
+
+  void updateWeightedRecords(String hostedZoneId, String subdomain,
+      List<WeightedRecord> updatedRecords) {
+    for (WeightedRecord record : updatedRecords) {
+      var aRecordSet = ResourceRecordSet.builder()
+          .name(subdomain) // Same subdomain as existing weighted records
+          .type(RRType.A)
+          .setIdentifier(record.identifier) // Unique identifier for the weighted record
+          .weight(record.weight)
+          .ttl(300L)
+          .resourceRecords(
+              ResourceRecord.builder().value(record.ipv4).build()) // Existing IP address
+          .build();
+
+      changeResourceRecordSets(hostedZoneId, aRecordSet, ChangeAction.UPSERT);
+    }
   }
 
   static class WeightedRecord {

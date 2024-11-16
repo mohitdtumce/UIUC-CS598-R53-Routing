@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.example.R53Helper;
 import org.example.R53Helper.WeightedRecord;
 import org.example.helper.AWSConfig;
 import org.example.helper.AWSCredentialHelper;
@@ -21,7 +20,8 @@ public class GSLBService {
 
   private final Map<GeoLocation, List<Region>> geoMapping = Map.of(
       GeoLocation.builder().countryCode("US").build(), List.of(Region.US_EAST_1, Region.US_EAST_2),
-      GeoLocation.builder().countryCode("IN").build(), List.of(Region.AP_NORTHEAST_1, Region.AP_NORTHEAST_2)
+      GeoLocation.builder().countryCode("IN").build(),
+      List.of(Region.AP_NORTHEAST_1, Region.AP_NORTHEAST_2)
   );
 
   GSLBService(AWSConfig config, AWSCredentialHelper credentialHelper) {
@@ -46,32 +46,68 @@ public class GSLBService {
 
         List<WeightedRecord> records = new ArrayList<>();
 
-        records.add(createWeightedRecord("aws", region, weightedSubdomain));
-        records.add(createWeightedRecord("azure", region, weightedSubdomain));
-        records.add(createWeightedRecord("gcp", region, weightedSubdomain));
+        records.add(createWeightedRecord("aws", region, weightedSubdomain, 40L));
+        records.add(createWeightedRecord("azure", region, weightedSubdomain, 30L));
+        records.add(createWeightedRecord("gcp", region, weightedSubdomain, 20L));
         helper.createWeightedARecords(zone.id(), weightedSubdomain, records);
       }
     }
   }
 
+  public void updateWeight(GeoLocation geoLocation, Region region, Route53Weights weights)
+      throws IOException {
+    // Get the hosted zone ID
+
+    HostedZone zone = helper.findOrCreateHostedZone(this.config.domain);
+    System.out.println("Found hosted zone:" + zone);
+
+    String weightedSubdomain = String.format("weighted.%s.%s", region, this.config.domain);
+
+    List<WeightedRecord> records = new ArrayList<>();
+
+    records.add(createWeightedRecord("aws", region, weightedSubdomain, weights.awsWeight));
+    records.add(createWeightedRecord("azure", region, weightedSubdomain, weights.azureWeight));
+    records.add(createWeightedRecord("gcp", region, weightedSubdomain, weights.gcpWeight));
+    helper.updateWeightedRecords(zone.id(), weightedSubdomain, records);
+  }
+
   private R53Helper.WeightedRecord createWeightedRecord(String provider, Region region,
-      String weightedSubdomain) {
+      String weightedSubdomain, Long weight) {
+    String identifier = String.format("%s.%s", provider, weightedSubdomain).trim();
     return switch (provider) {
       case "aws" -> new WeightedRecord(
-          String.format("%s.%s", provider, weightedSubdomain).trim(),
+          identifier,
           String.format("10.0.0.%d", Utils.consistentHash(provider + region)),
-          20L
+          weight
       );
       case "gcp" -> new WeightedRecord(
-          String.format("%s.%s", provider, weightedSubdomain).trim(),
+          identifier,
           String.format("172.16.0.%d", Utils.consistentHash(provider + region)),
-          15L
+          weight
       );
       default -> new WeightedRecord(
-          String.format("%s.%s", provider, weightedSubdomain).trim(),
+          identifier,
           String.format("192.168.0.%d", Utils.consistentHash(provider + region)),
-          10L
+          weight
       );
     };
+  }
+
+  public static class Route53Weights {
+
+    public long awsWeight;
+    public long azureWeight;
+    public long gcpWeight;
+
+    public Route53Weights(long awsWeight, long azureWeight, long gcpWeight) {
+      this.awsWeight = awsWeight;
+      this.azureWeight = azureWeight;
+      this.gcpWeight = gcpWeight;
+    }
+
+    @Override
+    public String toString() {
+      return String.format("AWS: %d, Azure: %d, GCP: %d", awsWeight, azureWeight, gcpWeight);
+    }
   }
 }
