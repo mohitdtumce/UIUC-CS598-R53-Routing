@@ -17,9 +17,16 @@ dependencies {
 
     implementation platform('com.google.cloud:libraries-bom:26.50.0')
     implementation 'com.google.cloud:google-cloud-storage'
-    implementation 'com.google.code.gson:gson:2.8.6'
+    implementation 'com.google.code.gson:gson:2.8.9'
+
+    implementation platform('com.azure:azure-sdk-bom:1.2.29')
+    implementation 'com.azure:azure-storage-blob'
 
     implementation 'org.apache.commons:commons-lang3:3.17.0'
+
+    // https://mvnrepository.com/artifact/com.opencsv/opencsv
+    implementation 'com.opencsv:opencsv:5.9'
+
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
